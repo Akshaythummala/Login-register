@@ -1,6 +1,12 @@
 // Jenkinsfile — save in root of your project
 pipeline {
   agent any   // Run on any available Jenkins agent
+
+  // Use the Maven installation configured in Jenkins → Manage Jenkins → Tools
+  tools {
+    maven 'Maven-3'   // ← must match the name you set in Jenkins Global Tool Config
+    jdk   'JDK-17'   // ← must match your JDK installation name in Jenkins
+  }
  
   // Environment variables — available to all stages
   environment {
@@ -34,8 +40,8 @@ pipeline {
       }
       post {
         always {
-          // Publish test results in Jenkins UI:
-          junit 'backend/target/surefire-reports/*.xml'
+          // Publish test results — allowEmptyResults prevents abort if mvn failed:
+          junit allowEmptyResults: true, testResults: 'backend/target/surefire-reports/*.xml'
         }
       }
     }
@@ -141,7 +147,8 @@ pipeline {
     }
     always {
       // Clean up Docker images from Jenkins server (save disk space):
-      sh 'docker system prune -f'
+      // '|| true' prevents post-stage failure if Docker is unavailable:
+      sh 'docker system prune -f || true'
     }
   }
 }
