@@ -88,16 +88,15 @@ pipeline {
     stage('Push to ECR') {
       steps {
         echo '=== Pushing images to Amazon ECR ==='
-        withAWS(credentials: 'aws-credentials', region: AWS_REGION) {
-          script {
-            // Login to ECR:
-            sh "aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REGISTRY}"
-            // Push both tags (build number + latest):
-            sh "docker push ${BACKEND_IMAGE}:${IMAGE_TAG}"
-            sh "docker push ${BACKEND_IMAGE}:latest"
-            sh "docker push ${FRONTEND_IMAGE}:${IMAGE_TAG}"
-            sh "docker push ${FRONTEND_IMAGE}:latest"
-          }
+        script {
+          // Login to ECR using AWS CLI:
+          sh "aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REGISTRY}"
+          
+          // Push both tags (build number + latest):
+          sh "docker push ${BACKEND_IMAGE}:${IMAGE_TAG}"
+          sh "docker push ${BACKEND_IMAGE}:latest"
+          sh "docker push ${FRONTEND_IMAGE}:${IMAGE_TAG}"
+          sh "docker push ${FRONTEND_IMAGE}:latest"
         }
       }
     }
@@ -106,13 +105,11 @@ pipeline {
     stage('Deploy to Kubernetes') {
       steps {
         echo '=== Deploying to EKS cluster ==='
-        withAWS(credentials: 'aws-credentials', region: AWS_REGION) {
-          script {
-            sh "aws eks update-kubeconfig --name ${CLUSTER_NAME} --region ${AWS_REGION}"
-            // Update images with new build number tag:
-            sh "kubectl set image deployment/backend backend=${BACKEND_IMAGE}:${IMAGE_TAG} -n ${K8S_NAMESPACE}"
-            sh "kubectl set image deployment/frontend frontend=${FRONTEND_IMAGE}:${IMAGE_TAG} -n ${K8S_NAMESPACE}"
-          }
+        script {
+          sh "aws eks update-kubeconfig --name ${CLUSTER_NAME} --region ${AWS_REGION}"
+          // Update images with new build number tag:
+          sh "kubectl set image deployment/backend backend=${BACKEND_IMAGE}:${IMAGE_TAG} -n ${K8S_NAMESPACE}"
+          sh "kubectl set image deployment/frontend frontend=${FRONTEND_IMAGE}:${IMAGE_TAG} -n ${K8S_NAMESPACE}"
         }
       }
     }
@@ -121,7 +118,7 @@ pipeline {
     stage('Verify Deployment') {
       steps {
         echo '=== Verifying deployment ==='
-        withAWS(credentials: 'aws-credentials', region: AWS_REGION) {
+        script {
           sh "kubectl rollout status deployment/backend -n ${K8S_NAMESPACE} --timeout=300s"
           sh "kubectl rollout status deployment/frontend -n ${K8S_NAMESPACE} --timeout=300s"
           sh "kubectl get pods -n ${K8S_NAMESPACE}"
