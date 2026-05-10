@@ -11,7 +11,7 @@ pipeline {
     BACKEND_IMAGE     = "${ECR_REGISTRY}/login-app/backend"
     FRONTEND_IMAGE    = "${ECR_REGISTRY}/login-app/frontend"
     K8S_NAMESPACE     = 'login-app'
-    CLUSTER_NAME      = 'login-app-cluster'
+    CLUSTER_NAME      = 'login-cluster'
     IMAGE_TAG         = "${BUILD_NUMBER}"  // Use build number as tag
   }
  
