@@ -108,6 +108,9 @@ pipeline {
         script {
           sh "aws eks update-kubeconfig --name ${CLUSTER_NAME} --region ${AWS_REGION}"
           
+          // Apply YAML changes (like replicas: 1)
+          sh "kubectl apply -f k8s/ -n ${K8S_NAMESPACE}"
+          
           // Update images with new build number tag:
           sh "kubectl set image deployment/auth-backend auth-backend=${BACKEND_IMAGE}:${IMAGE_TAG} -n ${K8S_NAMESPACE}"
           sh "kubectl set image deployment/auth-frontend auth-frontend=${FRONTEND_IMAGE}:${IMAGE_TAG} -n ${K8S_NAMESPACE}"
