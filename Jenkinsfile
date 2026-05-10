@@ -59,7 +59,7 @@ pipeline {
         echo '=== Building Angular application ==='
         dir('frontend') {
           sh 'npm ci'              // Clean install
-          sh 'npm run build -- --configuration production'
+          sh 'npm run build'       // Vite handles production build by default
           sh 'ls -lh dist/'
         }
       }
