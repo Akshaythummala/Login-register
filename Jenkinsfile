@@ -1,12 +1,8 @@
 // Jenkinsfile — save in root of your project
 pipeline {
   agent any   // Run on any available Jenkins agent
-
-  // Use the Maven installation configured in Jenkins → Manage Jenkins → Tools
-  tools {
-    maven 'Maven-3'   // ← must match the name you set in Jenkins Global Tool Config
-    jdk   'JDK-17'   // ← must match your JDK installation name in Jenkins
-  }
+  // Maven & Java are expected to be installed system-wide on the Jenkins agent
+  // (e.g. via: sudo apt-get install -y maven openjdk-17-jdk)
  
   // Environment variables — available to all stages
   environment {
