@@ -109,8 +109,8 @@ pipeline {
           sh "aws eks update-kubeconfig --name ${CLUSTER_NAME} --region ${AWS_REGION}"
           
           // Update images with new build number tag:
-          sh "kubectl set image deployment/auth-backend backend=${BACKEND_IMAGE}:${IMAGE_TAG} -n ${K8S_NAMESPACE}"
-          sh "kubectl set image deployment/auth-frontend frontend=${FRONTEND_IMAGE}:${IMAGE_TAG} -n ${K8S_NAMESPACE}"
+          sh "kubectl set image deployment/auth-backend auth-backend=${BACKEND_IMAGE}:${IMAGE_TAG} -n ${K8S_NAMESPACE}"
+          sh "kubectl set image deployment/auth-frontend auth-frontend=${FRONTEND_IMAGE}:${IMAGE_TAG} -n ${K8S_NAMESPACE}"
         }
       }
     }
