@@ -1,0 +1,91 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-backend
+  labels:
+    app: auth-backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: auth-backend
+  template:
+    metadata:
+      labels:
+        app: auth-backend
+    spec:
+      serviceAccountName: auth-service-account
+      containers:
+      - name: auth-backend
+        image: 381437929435.dkr.ecr.ap-south-1.amazonaws.com/login-backend:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+        env:
+        - name: DB_HOST
+          value: "mysql-service" # Assuming a mysql service exists or RDS endpoint
+        - name: DB_PORT
+          value: "3306"
+        - name: DB_NAME
+          value: "auth_db"
+        - name: DB_USER
+          value: "root"
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: db-secret
+              key: password
+        - name: ALLOWED_ORIGINS
+          value: "http://a0cd1256b302b4ff28f6790667bd4946-1386483541.ap-south-1.elb.amazonaws.com"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth-backend-service
+spec:
+  selector:
+    app: auth-backend
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8080
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-frontend
+  labels:
+    app: auth-frontend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: auth-frontend
+  template:
+    metadata:
+      labels:
+        app: auth-frontend
+    spec:
+      containers:
+      - name: auth-frontend
+        image: 381437929435.dkr.ecr.ap-south-1.amazonaws.com/login-frontend:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 80
+        env:
+        - name: VITE_API_BASE_URL
+          value: "http://auth-backend-service" # Internal service URL
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth-frontend-service
+spec:
+  selector:
+    app: auth-frontend
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+  type: LoadBalancer

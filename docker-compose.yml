@@ -1,0 +1,42 @@
+services:
+  db:
+    image: mysql:8.0
+    container_name: auth-db
+    restart: always
+    environment:
+      MYSQL_DATABASE: auth_db
+      MYSQL_ROOT_PASSWORD: rootpassword
+    ports:
+      - "3307:3306" # Expose on 3307 to avoid conflict with local MySQL if any
+    volumes:
+      - db_data:/var/lib/mysql
+
+  backend:
+    build: ./backend
+    container_name: auth-backend
+    restart: always
+    ports:
+      - "8080:8080"
+    environment:
+      - DB_HOST=db
+      - DB_PORT=3306
+      - DB_NAME=auth_db
+      - DB_USER=root
+      - DB_PASSWORD=rootpassword
+      - ALLOWED_ORIGINS=http://localhost,http://localhost:80,http://localhost:5173
+    depends_on:
+      - db
+
+  frontend:
+    build: ./frontend
+    container_name: auth-frontend
+    restart: always
+    ports:
+      - "80:80"
+    environment:
+      - VITE_API_BASE_URL=http://localhost:8080
+    depends_on:
+      - backend
+
+volumes:
+  db_data:
