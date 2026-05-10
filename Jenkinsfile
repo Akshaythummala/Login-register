@@ -1,75 +1,147 @@
+// Jenkinsfile — save in root of your project
 pipeline {
-    agent any
-
-    environment {
-        AWS_ACCOUNT_ID = '381437929435'
-        AWS_REGION = 'ap-south-1'
-        IMAGE_TAG = "${env.BUILD_NUMBER}"
-        CLUSTER_NAME = 'login-cluster'
+  agent any   // Run on any available Jenkins agent
+ 
+  // Environment variables — available to all stages
+  environment {
+    AWS_REGION        = 'ap-south-1'
+    ECR_REGISTRY      = '123456789012.dkr.ecr.ap-south-1.amazonaws.com'
+    BACKEND_IMAGE     = "${ECR_REGISTRY}/login-app/backend"
+    FRONTEND_IMAGE    = "${ECR_REGISTRY}/login-app/frontend"
+    K8S_NAMESPACE     = 'login-app'
+    CLUSTER_NAME      = 'login-app-cluster'
+    IMAGE_TAG         = "${BUILD_NUMBER}"  // Use build number as tag
+  }
+ 
+  stages {
+ 
+    // ── STAGE 1: CHECKOUT ─────────────────────────────────────
+    stage('Checkout') {
+      steps {
+        echo '=== Pulling latest code from GitHub ==='
+        checkout scm   // Pulls code from configured GitHub repo
+        sh 'git log --oneline -5'  // Show last 5 commits
+      }
     }
-
-    stages {
-        stage('Checkout') {
-            steps {
-                checkout scm
-            }
+ 
+    // ── STAGE 2: TEST BACKEND ─────────────────────────────────
+    stage('Test Backend') {
+      steps {
+        echo '=== Running Spring Boot unit tests ==='
+        dir('backend') {
+          sh 'mvn test -B'   // -B = batch mode (no colour output)
         }
-
-        stage('Build Artifact') {
-            steps {
-                dir('backend') {
-                    sh 'mvn clean package -DskipTests'
-                }
-            }
-        }
-
-        stage('Docker Build & Push') {
-            steps {
-                withCredentials([[
-                    $class: 'AmazonWebServicesCredentialsBinding',
-                    credentialsId: 'jenkins-aws-credentials' // Add this in Jenkins > Credentials
-                ]]) {
-                    script {
-                        sh "aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
-
-                        // Backend
-                        sh "docker build -t login-backend ./backend"
-                        sh "docker tag login-backend:latest ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/login-backend:${IMAGE_TAG}"
-                        sh "docker push ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/login-backend:${IMAGE_TAG}"
-
-                        // Frontend
-                        sh "docker build -t login-frontend ./frontend"
-                        sh "docker tag login-frontend:latest ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/login-frontend:${IMAGE_TAG}"
-                        sh "docker push ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/login-frontend:${IMAGE_TAG}"
-                    }
-                }
-            }
-        }
-
-        stage('Deploy to K8s') {
-            steps {
-                withCredentials([[
-                    $class: 'AmazonWebServicesCredentialsBinding',
-                    credentialsId: 'jenkins-aws-credentials'
-                ]]) {
-                    script {
-                        sh "aws eks update-kubeconfig --region ${AWS_REGION} --name ${CLUSTER_NAME}"
-                        sh "kubectl apply -f k8s/aws-auth.yaml"
-                        sh "kubectl apply -f k8s/mysql-deployment.yaml"
-                        sh "kubectl apply -f k8s/db-secret.yaml"
-                        sh "kubectl apply -f k8s/service-account.yaml"
-                        sh "kubectl apply -f k8s/deployment.yaml"
-                        sh "kubectl rollout restart deployment auth-backend"
-                        sh "kubectl rollout restart deployment auth-frontend"
-                    }
-                }
-            }
-        }
-    }
-
-    post {
+      }
+      post {
         always {
-            cleanWs()
+          // Publish test results in Jenkins UI:
+          junit 'backend/target/surefire-reports/*.xml'
         }
+      }
     }
+ 
+    // ── STAGE 3: BUILD BACKEND JAR ────────────────────────────
+    stage('Build Backend') {
+      steps {
+        echo '=== Building Spring Boot JAR ==='
+        dir('backend') {
+          sh 'mvn clean package -DskipTests -B'
+          sh 'ls -lh target/*.jar'
+        }
+      }
+    }
+ 
+    // ── STAGE 4: BUILD FRONTEND ───────────────────────────────
+    stage('Build Frontend') {
+      steps {
+        echo '=== Building Angular application ==='
+        dir('frontend') {
+          sh 'npm ci'              // Clean install
+          sh 'npm run build -- --configuration production'
+          sh 'ls -lh dist/'
+        }
+      }
+    }
+ 
+    // ── STAGE 5: BUILD DOCKER IMAGES ─────────────────────────
+    stage('Build Docker Images') {
+      steps {
+        echo '=== Building Docker images ==='
+        script {
+          // Build backend image:
+          dir('backend') {
+            sh "docker build -t ${BACKEND_IMAGE}:${IMAGE_TAG} ."
+            sh "docker tag ${BACKEND_IMAGE}:${IMAGE_TAG} ${BACKEND_IMAGE}:latest"
+          }
+          // Build frontend image:
+          dir('frontend') {
+            sh "docker build -t ${FRONTEND_IMAGE}:${IMAGE_TAG} ."
+            sh "docker tag ${FRONTEND_IMAGE}:${IMAGE_TAG} ${FRONTEND_IMAGE}:latest"
+          }
+        }
+      }
+    }
+ 
+    // ── STAGE 6: PUSH TO ECR ─────────────────────────────────
+    stage('Push to ECR') {
+      steps {
+        echo '=== Pushing images to Amazon ECR ==='
+        withAWS(credentials: 'aws-credentials', region: AWS_REGION) {
+          script {
+            // Login to ECR:
+            sh "aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REGISTRY}"
+            // Push both tags (build number + latest):
+            sh "docker push ${BACKEND_IMAGE}:${IMAGE_TAG}"
+            sh "docker push ${BACKEND_IMAGE}:latest"
+            sh "docker push ${FRONTEND_IMAGE}:${IMAGE_TAG}"
+            sh "docker push ${FRONTEND_IMAGE}:latest"
+          }
+        }
+      }
+    }
+ 
+    // ── STAGE 7: DEPLOY TO KUBERNETES ────────────────────────
+    stage('Deploy to Kubernetes') {
+      steps {
+        echo '=== Deploying to EKS cluster ==='
+        withAWS(credentials: 'aws-credentials', region: AWS_REGION) {
+          script {
+            sh "aws eks update-kubeconfig --name ${CLUSTER_NAME} --region ${AWS_REGION}"
+            // Update images with new build number tag:
+            sh "kubectl set image deployment/backend backend=${BACKEND_IMAGE}:${IMAGE_TAG} -n ${K8S_NAMESPACE}"
+            sh "kubectl set image deployment/frontend frontend=${FRONTEND_IMAGE}:${IMAGE_TAG} -n ${K8S_NAMESPACE}"
+          }
+        }
+      }
+    }
+ 
+    // ── STAGE 8: VERIFY DEPLOYMENT ───────────────────────────
+    stage('Verify Deployment') {
+      steps {
+        echo '=== Verifying deployment ==='
+        withAWS(credentials: 'aws-credentials', region: AWS_REGION) {
+          sh "kubectl rollout status deployment/backend -n ${K8S_NAMESPACE} --timeout=300s"
+          sh "kubectl rollout status deployment/frontend -n ${K8S_NAMESPACE} --timeout=300s"
+          sh "kubectl get pods -n ${K8S_NAMESPACE}"
+        }
+      }
+    }
+  }
+ 
+  // Run after all stages (success or failure):
+  post {
+    success {
+      echo '✅ Deployment SUCCESSFUL!'
+      // Send Slack/email notification here
+    }
+    failure {
+      echo '❌ Deployment FAILED!'
+      // Roll back if needed:
+      // sh 'kubectl rollout undo deployment/backend -n login-app'
+    }
+    always {
+      // Clean up Docker images from Jenkins server (save disk space):
+      sh 'docker system prune -f'
+    }
+  }
 }
