@@ -120,8 +120,8 @@ pipeline {
       steps {
         echo '=== Verifying deployment ==='
         script {
-          sh "kubectl rollout status deployment/backend -n ${K8S_NAMESPACE} --timeout=300s"
-          sh "kubectl rollout status deployment/frontend -n ${K8S_NAMESPACE} --timeout=300s"
+          sh "kubectl rollout status deployment/auth-backend -n ${K8S_NAMESPACE} --timeout=300s"
+          sh "kubectl rollout status deployment/auth-frontend -n ${K8S_NAMESPACE} --timeout=300s"
           sh "kubectl get pods -n ${K8S_NAMESPACE}"
         }
       }
