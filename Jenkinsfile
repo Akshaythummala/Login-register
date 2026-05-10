@@ -7,7 +7,7 @@ pipeline {
   // Environment variables — available to all stages
   environment {
     AWS_REGION        = 'ap-south-1'
-    ECR_REGISTRY      = '123456789012.dkr.ecr.ap-south-1.amazonaws.com'
+    ECR_REGISTRY      = '381437929435.dkr.ecr.ap-south-1.amazonaws.com'
     BACKEND_IMAGE     = "${ECR_REGISTRY}/login-app/backend"
     FRONTEND_IMAGE    = "${ECR_REGISTRY}/login-app/frontend"
     K8S_NAMESPACE     = 'login-app'
